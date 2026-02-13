@@ -181,6 +181,7 @@ static bool str_to_bool(String s);
 // OS I/O
 // ----------------------------------------------------------------------------------------------------
 static uz os_read_file(char *path, u8 *buffer, uz cap);
+static void os_write(String s);
 
 // IMPLEMENTATION
 // ====================================================================================================
@@ -548,6 +549,15 @@ static uz os_read_file(char *path, u8 *buffer, uz cap)
     return has_read_total;
 }
 
+static void os_write(String s)
+{
+    HANDLE handle_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle_stdout != INVALID_HANDLE_VALUE) {
+        u32 written = 0;
+        WriteFile(handle_stdout, s.str, (u32)s.len, &written, NULL);
+    }
+}
+
 #else
 
 #include <fcntl.h>
@@ -569,6 +579,12 @@ static uz os_read_file(char *path, u8 *buffer, uz cap)
     close(fd);
 
     return has_read_total;
+}
+
+static void os_write(String s)
+{
+    sz result = write(STDOUT_FILENO, s.str, s.len);
+    (void)result;
 }
 
 #endif
