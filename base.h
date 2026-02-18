@@ -115,11 +115,13 @@ struct String {
 
 #define str_lit(s) ((String){(u8*)s, sizeof(s)-1})
 
+
 static uz cstr_length(char *s);
 static bool str_match(String a, String b);
 static bool str_starts_with(String s, String prefix);
 static String str_push_copy(Arena *arena, String s);
 static inline String str_from_range(u8 *first, u8 *one_past_last);
+static String str_from_cstr(char *s);
 static String str_from_file(Arena *arena, String path);
 
 // nullprogram hashing function
@@ -315,6 +317,11 @@ static String str_push_copy(Arena *arena, String s)
     return result;
 }
 
+static String str_from_cstr(char *s)
+{
+    String result = (String){(u8*)s, cstr_length(s)};
+    return result;
+}
 
 static inline String str_from_range(u8 *first, u8 *one_past_last)
 {
