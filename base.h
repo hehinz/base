@@ -117,6 +117,8 @@ struct String {
 #define str_varg(s) (int)s.len, (char *)s.str
 
 static uz cstr_length(char *s);
+static char *cstr_find_char(char *s, char c);
+
 static bool str_match(String a, String b);
 static bool str_starts_with(String s, String prefix);
 static String str_push_copy(Arena *arena, String s);
@@ -288,6 +290,17 @@ static uz cstr_length(char *s)
         len = (uz)(ptr - s);
     }
     return len;
+}
+
+static char *cstr_find_char(char *s, char c)
+{
+    char *ptr = s;
+    if (s) {
+        for (; *ptr != 0; ptr++) {
+            if (*ptr == 'c') { break; }
+        }
+    }
+    return ptr;
 }
 
 static bool str_match(String a, String b)
