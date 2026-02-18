@@ -114,7 +114,7 @@ struct String {
 };
 
 #define str_lit(s) ((String){(u8*)s, sizeof(s)-1})
-
+#define str_varg(s) (int)s.len, (char *)s.str
 
 static uz cstr_length(char *s);
 static bool str_match(String a, String b);
