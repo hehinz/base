@@ -184,6 +184,23 @@ static bool str_to_bool(String s);
 
 // CmdLineOptions immediate mode style
 // ----------------------------------------------------------------------------------------------------
+/*
+    while (clopts_next(&clopts)) {
+        if (clopts_match(&clopts, 'h', str_lit(""))) {
+            printf("h enabled\n");
+        } else if (clopts_match(&clopts, 'y', str_lit(""))) {
+            printf("y enabled\n");
+        } else if (clopts_match(&clopts, 'n', str_lit("name")) &&
+                clopts_chomp_arg(&clopts, &tmp)) {
+            printf("name: %.*s\n", str_varg(tmp));
+        }
+    }
+
+    if (clopts.err) {
+        printf("Option <%s> %.*s", clopts.cur.beg, str_varg(CmdLineErrorMsg[clopts.err]));
+    }
+*/
+
 typedef struct CmdLineOption CmdLineOption;
 
 struct CmdLineOption
