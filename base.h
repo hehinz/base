@@ -12,7 +12,7 @@
 #define alignof(x) _Alignof(x)
 
 typedef unsigned char u8;
-typedef signed char s8;
+typedef char s8;
 typedef unsigned short u16;
 typedef signed short s16;
 typedef unsigned int u32;
@@ -755,4 +755,3 @@ static void os_write(String s)
 
 
 #endif
-
