@@ -6,9 +6,9 @@
 #define read_only __attribute__((section(".rodata")))
 
 // C11
-// typedef _Bool bool;
-// #define true 1
-// #define false 0
+typedef _Bool bool;
+#define true 1
+#define false 0
 #define alignof(x) _Alignof(x)
 
 typedef unsigned char u8;
@@ -19,10 +19,10 @@ typedef unsigned int u32;
 typedef signed int s32;
 #ifdef _WIN32
 typedef unsigned long long u64;
-typedef signed long int s64;
+typedef signed long long s64;
 #else
 typedef unsigned long int u64;
-typedef signed long long s64;
+typedef signed long int s64;
 #endif
 typedef typeof(sizeof(0u)) uz;
 typedef typeof(sizeof(0)) sz;
@@ -158,13 +158,13 @@ struct Split {
     bool ok;
 };
 
-Split str_split_once(String input, s8 split_char);
+static Split str_split_once(String input, s8 split_char);
 
 
 typedef struct StringNode StringNode;
 struct StringNode {
     String string;
-    String *next;
+    StringNode *next;
 };
 
 typedef struct StringList StringList;
@@ -272,7 +272,7 @@ static u8 *arena_alloc(Arena *arena, uz size, uz align_size, uz count)
 
     u8 *ptr = arena->beg + align;
     arena->beg += align + alloc_size;
-    __builtin_memset(ptr, 0, count);
+    __builtin_memset(ptr, 0, alloc_size);
 
     return ptr;
 }
@@ -282,7 +282,7 @@ static ArenaUsage arena_report_usage(Arena *arena)
 {
     uz free = (uz)(arena->end - arena->beg);
     uz usage = arena->cap - free;
-    float perc = (float)usage/(float)arena->cap * 100;
+    float perc = arena->cap ? (float)usage / (float)arena->cap * 100.f : 0.f;
     u16 b = (u16)(usage & ((1 << 10) - 1));
     u16 kib = (u16)((usage >> 10) & ((1 << 10) - 1));
     u16 mib = (u16)((usage >> 20) & ((1 << 10) - 1));
@@ -328,7 +328,7 @@ static inline bool char_is_alnum(u8 c)
 static inline bool char_is_digit(u8 c, u32 radix)
 {
     bool result = false;
-    if (1 <= radix && radix <= 16) {
+    if (c < 128 && 1 <= radix && radix <= 16) {
         u8 val = integer_symbol_reverse[c];
         if (val < radix) {
             result = true;
@@ -354,7 +354,7 @@ static char *cstr_find_char(char *s, char c)
     char *ptr = s;
     if (s) {
         for (; *ptr != 0; ptr++) {
-            if (*ptr == 'c') { break; }
+            if (*ptr == c) { break; }
         }
     }
     return ptr;
@@ -370,9 +370,10 @@ static bool str_match(String a, String b)
 
 static bool str_starts_with(String s, String prefix)
 {
-    uz len = CLAMPTOP(s.len, prefix.len);
-    s.len = len;
-    prefix.len = len;
+    if (prefix.len > s.len) {
+        return false;
+    }
+    s.len = prefix.len;
     return str_match(s, prefix);
 }
 
@@ -401,6 +402,7 @@ static inline String str_from_range(u8 *first, u8 *one_past_last)
 
 static String str_from_file(Arena *arena, String path)
 {
+    ASSERT_ALWAYS(path.len < 256);
     char raw_path[256];
     for (uz i = 0; i < path.len; i++) {
         raw_path[i] = path.str[i];
@@ -456,15 +458,17 @@ static inline String str_skip_space(String s)
 static String str_skip_line(String s)
 {
     while (s.len && s.str[0] != '\n') { s.str++; s.len--; }
-    s.str += 1;
-    s.len -= 1;
+    if (s.len && s.str[0] == '\n') {
+        s.str += 1;
+        s.len -= 1;
+    }
     return s;
 }
 
 
 static inline String str_trim_right(String s)
 {
-    while ( s.len && char_is_space(s.str[s.len])) {
+    while ( s.len && char_is_space(s.str[s.len - 1])) {
         s.len -= 1;
     }
     return s;
@@ -504,29 +508,35 @@ static uz str_find_newline(String source, uz offset)
 {
     uz at = offset;
     while (str_in_bounds(source, at) && source.str[at] != '\n') { at++; }
-    at++;
+    if (at < source.len) {
+        at++;
+    }
     return at;
 }
 
 static void str_to_upper(String s)
 {
     for (uz i = 0; i < s.len; i++) {
-        s.str[i] &= (0x20 ^ 0xFF);
+        if (char_is_lower(s.str[i])) {
+            s.str[i] &= (u8)~0x20;
+        }
     }
 }
 
 static void str_to_lower(String s)
 {
     for (uz i = 0; i < s.len; i++) {
-        s.str[i] |= 0x20;
+        if (char_is_upper(s.str[i])) {
+            s.str[i] |= 0x20;
+        }
     }
 }
 
 static String str_postfix(String s, uz len)
 {
-    ASSERT_ALWAYS(len <= s.len);
-    s.str += len;
-    s.len -= len;
+    len = CLAMPTOP(s.len, len);
+    s.str += s.len - len;
+    s.len = len;
     return s;
 }
 
@@ -536,13 +546,13 @@ static String str_prefix(String s, uz len)
     return s;
 }
 
-Split str_split_once(String input, s8 split_char) {
+static Split str_split_once(String input, s8 split_char) {
     Split split = {};
     uz i = 0;
     for (; i < input.len && input.str[i] != split_char; i++) {}
     split.ok = (i < input.len);
     split.head = str_prefix(input, i);
-    split.tail = str_postfix(input, i + split.ok);
+    split.tail = str_skip(input, i + split.ok);
 
     return split;
 }
@@ -559,8 +569,12 @@ static u64 u64_from_str(String s, u32 radix)
     u64 result = 0;
     if ( 1 < radix && radix <= 16) {
         for (uz i = 0; i < s.len; i++) {
+            u8 val = integer_symbol_reverse[s.str[i] & 0x7f];
+            if (val >= radix) {
+                break;
+            }
             result *= radix;
-            result += integer_symbol_reverse[(s.str[i] & 0x7f)];
+            result += val;
         }
     }
 
@@ -583,7 +597,7 @@ static u32 str_to_u32(String s)
         radix = 10;
     }
 
-    String integer = str_postfix(s, prefix_size);
+    String integer = str_skip(s, prefix_size);
     u32 result = safe_cast_u32(u64_from_str(integer, radix));
 
     return result;
@@ -692,20 +706,30 @@ static uz os_read_file(char *path, u8 *buffer, uz cap)
 {
     uz has_read_total = 0;
     WIN32_FILE_ATTRIBUTE_DATA data = {0};
-    GetFileAttributesExA(path, GetFileExInfoStandard, &data);
-    u64 size = (((u64)data.nFileSizeHigh) << 32 | (u64)data.nFileSizeLow);
+    if (!GetFileAttributesExA(path, GetFileExInfoStandard, &data)) {
+        return 0;
+    }
+    u64 size = (((u64)data.nFileSizeHigh) << 32) | (u64)data.nFileSizeLow;
+    if (size > cap) {
+        size = cap;
+    }
 
-    HANDLE handle = CreateFileA(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE handle = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    if (handle) {
-
+    if (handle != INVALID_HANDLE_VALUE) {
         for (u64 offset = 0; offset < size;) {
             u64 to_read = size - offset;
+            if (to_read > 0xFFFFFFFFu) {
+                to_read = 0xFFFFFFFFu;
+            }
             DWORD has_read = 0;
-            ReadFile(handle, buffer + offset, to_read, &has_read, 0);
+            if (!ReadFile(handle, buffer + offset, (DWORD)to_read, &has_read, 0) || has_read == 0) {
+                break;
+            }
             offset += has_read;
             has_read_total += has_read;
         }
+        CloseHandle(handle);
     }
     return has_read_total;
 }
@@ -727,13 +751,25 @@ static void os_write(String s)
 static uz os_read_file(char *path, u8 *buffer, uz cap)
 {
     struct stat st;
-    stat(path, &st);
-    uz size = st.st_size;
+    if (stat(path, &st) != 0) {
+        return 0;
+    }
+    uz size = (uz)st.st_size;
+    if (size > cap) {
+        size = cap;
+    }
+
     int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        return 0;
+    }
 
     uz has_read_total = 0;
     while (has_read_total < size) {
-        sz has_read = read(fd, buffer, size);
+        sz has_read = read(fd, buffer + has_read_total, size - has_read_total);
+        if (has_read <= 0) {
+            break;
+        }
         has_read_total += (uz)has_read;
     }
 
